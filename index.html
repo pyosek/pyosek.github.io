@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yarok</title>
+    <link rel="icon" href="https://github.com/pyosek.png" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Skranji:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'JetBrains Mono', monospace;
+            background: #08090a;
+            color: #fff;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        #rain-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .fog-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .fog-layer::before,
+        .fog-layer::after {
+            content: '';
+            position: absolute;
+            width: 220%;
+            height: 220%;
+            top: -60%;
+            left: -60%;
+            background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(20,20,22,0.95) 0%, transparent 75%);
+            animation: fog-move 22s ease-in-out infinite alternate;
+        }
+
+        .fog-layer::after {
+            animation-duration: 32s;
+            animation-direction: alternate-reverse;
+            background: radial-gradient(ellipse 55% 45% at 35% 65%, rgba(15,15,17,0.9) 0%, transparent 70%);
+        }
+
+        @keyframes fog-move {
+            from { transform: translate(0, 0); }
+            to { transform: translate(6%, 4%); }
+        }
+
+        #intro {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #08090a;
+            transition: opacity 0.9s ease, visibility 0.9s ease;
+        }
+
+        #intro.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        #enter-btn {
+            position: relative;
+            font-family: 'Skranji', cursive, sans-serif;
+            font-size: clamp(14px, 2.2vw, 18px);
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(220, 220, 225, 0.85);
+            background: rgba(25, 25, 28, 0.4);
+            border: 1px solid rgba(150, 150, 158, 0.6);
+            padding: 15px 48px;
+            border-radius: 6px;
+            cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(140, 140, 148, 0.4), inset 0 0 10px rgba(140, 140, 148, 0.2);
+            transition: border-color 0.3s, color 0.3s, transform 0.2s, box-shadow 0.3s;
+        }
+
+        #enter-btn:hover {
+            border-color: rgba(230, 230, 235, 0.9);
+            color: #fff;
+            box-shadow: 0 0 25px rgba(200, 200, 208, 0.8), inset 0 0 15px rgba(200, 200, 208, 0.4);
+            transform: scale(1.04);
+        }
+
+        #enter-btn:active {
+            transform: scale(0.97);
+        }
+
+        #main {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease 0.1s;
+            padding: 20px;
+        }
+
+        #main.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #card-wrap {
+            perspective: 1000px;
+            animation: fade-up 0.9s cubic-bezier(.2, .8, .4, 1) both;
+            animation-delay: 0.3s;
+            will-change: transform;
+            width: 100%;
+            max-width: 340px;
+        }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(28px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .card-inner {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 0 22px 24px;
+            overflow: hidden;
+            background: rgba(10, 10, 11, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            background-clip: padding-box;
+            border: 1px solid rgba(150, 150, 158, 0.4);
+            border-radius: 16px;
+            box-shadow: 0 0 35px rgba(120, 120, 128, 0.25),
+                        0 0 70px rgba(80, 80, 88, 0.15),
+                        inset 0 0 25px rgba(100, 100, 108, 0.15);
+            will-change: transform;
+            transition: transform 0.1s linear, box-shadow 0.3s ease;
+            backface-visibility: hidden;
+            transform: translateZ(0);
+        }
+
+        .fetch-container {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            align-items: center;
+            text-align: center;
+        }
+
+        .titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0 -22px 20px;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.04);
+            border-bottom: 1px solid rgba(150, 150, 158, 0.18);
+            font-size: 11px;
+            color: #8a8a92;
+            letter-spacing: 0.04em;
+        }
+
+        .dots { display: flex; gap: 7px; }
+
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            cursor: default;
+        }
+
+        .dot.r { background: rgba(255, 255, 255, 0.16); }
+        .dot.y { background: rgba(255, 255, 255, 0.16); }
+        .dot.g { background: rgba(255, 255, 255, 0.16); }
+
+        .status-dot {
+            position: absolute;
+            right: -6px;
+            bottom: -6px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #6b6b73;
+            border: 4px solid #0d0d0e;
+            transition: background 0.3s;
+        }
+
+        .status-dot.online { background: #3ba55d; }
+
+        .avatar-column {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .avatar-wrap {
+            width: 110px;
+            height: 110px;
+            border-radius: 14px;
+            background: rgba(22, 22, 24, 0.8);
+            border: 1px solid rgba(150, 150, 158, 0.35);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .avatar-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .info-column {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-host {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .user { color: #f2f2f5; }
+        .separator { color: #8a8a92; }
+        .host { color: #f2f2f5; }
+
+        .line-sep {
+            height: 1px;
+            margin: 14px 0;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+        }
+
+        .info-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13.5px;
+        }
+
+        .key {
+            color: #f2f2f5;
+            font-weight: bold;
+            min-width: 58px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .colon {
+            color: #8a8a92;
+            margin-right: 10px;
+        }
+
+        .val {
+            color: #c8c8ce;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .game-name {
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .game-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .game-time {
+            color: #8a8a92;
+            font-size: 12px;
+        }
+
+        #active-val {
+            display: block;
+            min-width: 0;
+        }
+
+        .marq {
+            overflow: hidden;
+            max-width: 100%;
+        }
+
+        .marq-track {
+            display: flex;
+            width: max-content;
+        }
+
+        .marq-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .marq-gap {
+            width: 40px;
+            flex-shrink: 0;
+        }
+
+        .marq:not(.scroll) .marq-clone,
+        .marq:not(.scroll) .marq-gap {
+            display: none;
+        }
+
+        .marq.scroll {
+            -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+        }
+
+        .marq.scroll .marq-track {
+            animation: marq-move var(--d, 10s) linear infinite;
+        }
+
+        @keyframes marq-move {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        .links-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .link-item {
+            font-size: 13.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .link-btn, .link-a {
+            background: none;
+            border: none;
+            color: #c8c8ce;
+            font-family: inherit;
+            font-size: 13.5px;
+            cursor: pointer;
+            padding: 0;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .link-btn:hover, .link-a:hover {
+            color: #ffffff;
+            text-decoration: underline;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) translateY(14px);
+            background: rgba(12, 12, 13, 0.9);
+            backdrop-filter: blur(18px);
+            border: 1px solid rgba(140, 140, 148, 0.6);
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Skranji', cursive, sans-serif;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            padding: 9px 22px;
+            border-radius: 100px;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+            box-shadow: 0 0 15px rgba(120, 120, 128, 0.4);
+            transition: opacity 0.28s, transform 0.28s;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 580px) {
+            #card-wrap { max-width: 320px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="rain-canvas"></canvas>
+    <div class="fog-layer"></div>
+
+    <div id="intro">
+        <button id="enter-btn">ENTER</button>
+    </div>
+
+    <div id="main">
+        <div id="card-wrap">
+            <div class="card-inner" id="cardInner">
+                <div class="titlebar">
+                    <span>yarok ~</span>
+                    <div class="dots">
+                        <span class="dot y"></span>
+                        <span class="dot g"></span>
+                        <span class="dot r"></span>
+                    </div>
+                </div>
+                <div class="fetch-container">
+                    <div class="avatar-column">
+                        <div class="avatar-wrap">
+                            <img src="https://github.com/pyosek.png" alt="yarok" onerror="this.style.display='none'">
+                        </div>
+                        <span class="status-dot" id="status-dot"></span>
+                    </div>
+                    
+                    <div class="info-column">
+                        <div class="user-host">
+                            <span class="user">yarok</span>
+                        </div>
+                        
+                        <div class="line-sep"></div>
+
+                        <div class="info-group">
+                            <div class="info-row">
+                                <span class="key">OS</span>
+                                <span class="colon">:</span>
+                                <span class="val">Windows 11 Pro / CachyOS</span>
+                            </div>
+                            <div class="info-row" id="active-row" style="display: none;">
+                                <span class="key">Active</span>
+                                <span class="colon">:</span>
+                                <span class="val" id="active-val"></span>
+                            </div>
+                        </div>
+
+                        <div class="line-sep"></div>
+
+                        <div class="links-group">
+                            <div class="link-item">
+                                <button class="link-btn" onclick="copyDiscord()">discord: pyosek</button>
+                            </div>
+                            <div class="link-item">
+                                <a href="https://github.com/pyosek" target="_blank" rel="noopener" class="link-a">github: pyosek</a>
+                            </div>
+                            <div class="link-item">
+                                <a href="https://steamcommunity.com/id/pyosek" target="_blank" rel="noopener" class="link-a">steam: pyosek</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">Copied to clipboard!</div>
+
+    <audio id="bg-audio" src="audio.mp3" loop></audio>
+
+    <script>
+        const canvas = document.getElementById('rain-canvas');
+        const ctx = canvas.getContext('2d');
+        let drops = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drops = [];
+            const n = Math.floor((canvas.width * canvas.height) / 4500);
+            for (let i = 0; i < n; i++) {
+                drops.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    len: 12 + Math.random() * 25,
+                    spd: 8 + Math.random() * 8,
+                    op: 0.12 + Math.random() * 0.22,
+                    w: 1 + Math.random() * 0.8
+                });
+            }
+        }
+
+        function drawRain() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (const d of drops) {
+                ctx.beginPath();
+                ctx.moveTo(d.x, d.y);
+                ctx.lineTo(d.x - d.len * 0.14, d.y + d.len);
+                ctx.strokeStyle = `rgba(170,170,178,${d.op})`;
+                ctx.lineWidth = d.w;
+                ctx.stroke();
+                d.y += d.spd;
+                d.x -= d.spd * 0.14;
+                if (d.y > canvas.height) { d.y = -d.len; d.x = Math.random() * canvas.width; }
+            }
+        }
+
+        function loop() { drawRain(); requestAnimationFrame(loop); }
+
+        window.addEventListener('resize', () => {
+            isMob = window.innerWidth <= 600;
+            resizeCanvas();
+        });
+        resizeCanvas();
+        loop();
+
+        const cardInner = document.getElementById('cardInner');
+        let isMob = window.innerWidth <= 600;
+
+        function tilt(e) {
+            if (isMob) return;
+            const r = cardInner.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / (r.width / 2)));
+            const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / (r.height / 2)));
+            cardInner.style.transform = `rotateX(${-dy * 8}deg) rotateY(${dx * 8}deg) translateZ(0)`;
+        }
+
+        function resetTilt() {
+            cardInner.style.transform = 'rotateX(0) rotateY(0) translateZ(0)';
+        }
+
+        document.addEventListener('mousemove', tilt);
+        document.addEventListener('mouseleave', resetTilt);
+
+        function copyDiscord() {
+            navigator.clipboard.writeText('pyosek').catch(() => {
+                const t = document.createElement('textarea');
+                t.value = 'pyosek';
+                document.body.appendChild(t);
+                t.select();
+                document.execCommand('copy');
+                t.remove();
+            });
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        const audio = document.getElementById('bg-audio');
+        const TARGET_VOLUME = 0.55;
+        let hasEntered = false;
+        let audioFadeInterval;
+
+        document.getElementById('enter-btn').addEventListener('click', function() {
+            hasEntered = true;
+            audio.volume = 0;
+            audio.play().then(() => {
+                let v = 0;
+                const fadeIn = setInterval(() => {
+                    v = Math.min(v + 0.015, TARGET_VOLUME);
+                    audio.volume = v;
+                    if (v >= TARGET_VOLUME) clearInterval(fadeIn);
+                }, 80);
+            }).catch(() => {});
+
+            setTimeout(() => {
+                document.getElementById('intro').classList.add('hidden');
+                document.getElementById('main').classList.add('visible');
+            }, 140);
+        });
+
+        window.addEventListener("blur", () => {
+            if (!hasEntered) return;
+            clearInterval(audioFadeInterval);
+            let currentVol = audio.volume;
+            let step = currentVol / 60;
+            audioFadeInterval = setInterval(() => {
+                currentVol -= step;
+                if (currentVol <= 0) {
+                    currentVol = 0;
+                    audio.volume = currentVol;
+                    audio.pause();
+                    clearInterval(audioFadeInterval);
+                } else {
+                    audio.volume = currentVol;
+                }
+            }, 50);
+        });
+
+        window.addEventListener("focus", () => {
+            if (!hasEntered) return;
+            clearInterval(audioFadeInterval);
+            audio.play().catch(() => {});
+            let currentVol = audio.volume;
+            let step = (TARGET_VOLUME - currentVol) / 30;
+            audioFadeInterval = setInterval(() => {
+                currentVol += step;
+                if (currentVol >= TARGET_VOLUME) {
+                    currentVol = TARGET_VOLUME;
+                    audio.volume = currentVol;
+                    clearInterval(audioFadeInterval);
+                } else {
+                    audio.volume = currentVol;
+                }
+            }, 30);
+        });
+
+        const DISCORD_ID = '1359108135155138583';
+        let gameTimerInterval = null;
+
+        function formatDuration(startTime) {
+            const total = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            const h = Math.floor(total / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const sec = total % 60;
+            if (h > 0) return `${h}h ${m}m ${sec}s`;
+            if (m > 0) return `${m}m ${sec}s`;
+            return `${sec}s`;
+        }
+
+        function getGameIcon(game) {
+            const a = game.assets;
+            const img = a && (a.large_image || a.small_image);
+            if (!img) return null;
+            if (img.startsWith('mp:external/')) return 'https://media.discordapp.net/external/' + img.slice(12);
+            if (img.startsWith('mp:')) return 'https://media.discordapp.net/' + img.slice(3);
+            if (/^\d+$/.test(img) && game.application_id) return `https://cdn.discordapp.com/app-assets/${game.application_id}/${img}.png`;
+            return null;
+        }
+
+        const appIconCache = {};
+        let currentAppId = null;
+
+        async function fetchAppIcon(appId) {
+            if (appId in appIconCache) return appIconCache[appId];
+            try {
+                const r = await fetch('https://discord.com/api/v10/applications/' + appId + '/rpc');
+                const j = await r.json();
+                appIconCache[appId] = j.icon ? 'https://cdn.discordapp.com/app-icons/' + appId + '/' + j.icon + '.png?size=64' : null;
+            } catch (e) {
+                appIconCache[appId] = null;
+            }
+            return appIconCache[appId];
+        }
+
+        function connectLanyard() {
+            const ws = new WebSocket('wss://api.lanyard.rest/socket');
+            let hb = null;
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    op: 2,
+                    d: { subscribe_to_id: DISCORD_ID }
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.op === 1 && data.d && data.d.heartbeat_interval) {
+                    hb = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ op: 3 })), data.d.heartbeat_interval);
+                }
+                if (data.op === 1 || data.t === 'INIT_STATE' || data.t === 'PRESENCE_UPDATE') {
+                    const presence = data.t ? data.d : data.d.presence;
+                    if (presence) updatePresence(presence);
+                }
+            };
+
+            ws.onclose = () => { clearInterval(hb); setTimeout(connectLanyard, 5000); };
+        }
+
+        function fitMarquee() {
+            const m = document.querySelector('#active-val .marq');
+            if (!m) return;
+            const item = m.querySelector('.marq-item');
+            const over = item.offsetWidth > m.clientWidth + 1;
+            if (over === m.classList.contains('scroll')) return;
+            m.classList.toggle('scroll', over);
+            if (over) m.firstElementChild.style.setProperty('--d', ((item.offsetWidth + 40) / 40) + 's');
+        }
+
+        window.addEventListener('resize', fitMarquee);
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitMarquee);
+
+        function updatePresence(presence) {
+            const statusDot = document.getElementById('status-dot');
+            const activeRow = document.getElementById('active-row');
+            const activeVal = document.getElementById('active-val');
+
+            const status = presence.discord_status || 'offline';
+            const isOnline = status !== 'offline';
+
+            statusDot.classList.toggle('online', isOnline);
+
+            if (gameTimerInterval) clearInterval(gameTimerInterval);
+
+            const game = presence.activities ? presence.activities.find(a => a.type === 0) : null;
+
+            if (isOnline && game) {
+                const icon = getGameIcon(game);
+                const startTime = (game.timestamps && game.timestamps.start) || game.created_at || null;
+                const desc = [game.details, game.state].filter(Boolean).join(' · ');
+                const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+                const build = iconUrl =>
+                    (iconUrl ? `<img class="game-icon" src="${iconUrl}" alt="" onerror="this.remove(); fitMarquee()">` : '') +
+                    `<span class="game-name">${esc(game.name)}</span>` +
+                    (startTime ? ` <span class="game-time game-timer"></span>` : '') +
+                    (desc ? ` <span class="game-time">— ${esc(desc)}</span>` : '');
+                const render = iconUrl => {
+                    const inner = build(iconUrl);
+                    activeVal.innerHTML = `<div class="marq"><div class="marq-track"><span class="marq-item">${inner}</span><span class="marq-gap"></span><span class="marq-item marq-clone" aria-hidden="true">${inner}</span><span class="marq-gap"></span></div></div>`;
+                    tick();
+                };
+                const tick = () => {
+                    if (startTime) {
+                        const t = '(' + formatDuration(startTime) + ')';
+                        activeVal.querySelectorAll('.game-timer').forEach(el => { el.textContent = t; });
+                    }
+                    fitMarquee();
+                };
+                activeRow.style.display = 'flex';
+                render(icon);
+
+                currentAppId = game.application_id || null;
+                if (!icon && currentAppId) {
+                    const appId = currentAppId;
+                    fetchAppIcon(appId).then(url => {
+                        if (url && currentAppId === appId) render(url);
+                    });
+                }
+
+                if (startTime) gameTimerInterval = setInterval(tick, 1000);
+            } else {
+                currentAppId = null;
+                activeRow.style.display = 'none';
+            }
+        }
+
+        connectLanyard();
+    </script>
+</body>
+</html>
