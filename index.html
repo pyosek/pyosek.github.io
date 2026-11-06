@@ -250,8 +250,6 @@
         }
 
         .user { color: #f2f2f5; }
-        .separator { color: #8a8a92; }
-        .host { color: #f2f2f5; }
 
         .line-sep {
             height: 1px;
@@ -312,50 +310,22 @@
         }
 
         #active-val {
-            display: block;
+            flex-wrap: nowrap;
             min-width: 0;
-        }
-
-        .marq {
-            overflow: hidden;
-            max-width: 100%;
-        }
-
-        .marq-track {
-            display: flex;
-            width: max-content;
-        }
-
-        .marq-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            overflow-x: auto;
             white-space: nowrap;
+            scrollbar-width: none;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #active-val::-webkit-scrollbar { display: none; }
+
+        #active-val.dragging { cursor: grabbing; }
+
+        #active-val > * {
             flex-shrink: 0;
-        }
-
-        .marq-gap {
-            width: 40px;
-            flex-shrink: 0;
-        }
-
-        .marq:not(.scroll) .marq-clone,
-        .marq:not(.scroll) .marq-gap {
-            display: none;
-        }
-
-        .marq.scroll {
-            -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-            mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-        }
-
-        .marq.scroll .marq-track {
-            animation: marq-move var(--d, 10s) linear infinite;
-        }
-
-        @keyframes marq-move {
-            from { transform: translateX(0); }
-            to { transform: translateX(-50%); }
         }
 
         .links-group {
@@ -693,18 +663,24 @@
             ws.onclose = () => { clearInterval(hb); setTimeout(connectLanyard, 5000); };
         }
 
-        function fitMarquee() {
-            const m = document.querySelector('#active-val .marq');
-            if (!m) return;
-            const item = m.querySelector('.marq-item');
-            const over = item.offsetWidth > m.clientWidth + 1;
-            if (over === m.classList.contains('scroll')) return;
-            m.classList.toggle('scroll', over);
-            if (over) m.firstElementChild.style.setProperty('--d', ((item.offsetWidth + 40) / 40) + 's');
-        }
-
-        window.addEventListener('resize', fitMarquee);
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitMarquee);
+        (function () {
+            const el = document.getElementById('active-val');
+            let down = false, startX = 0, startLeft = 0;
+            el.addEventListener('pointerdown', e => {
+                if (e.pointerType !== 'mouse') return;
+                down = true;
+                startX = e.clientX;
+                startLeft = el.scrollLeft;
+                el.classList.add('dragging');
+                el.setPointerCapture(e.pointerId);
+            });
+            el.addEventListener('pointermove', e => {
+                if (down) el.scrollLeft = startLeft - (e.clientX - startX);
+            });
+            const end = () => { down = false; el.classList.remove('dragging'); };
+            el.addEventListener('pointerup', end);
+            el.addEventListener('pointercancel', end);
+        })();
 
         function updatePresence(presence) {
             const statusDot = document.getElementById('status-dot');
@@ -727,13 +703,12 @@
                 const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
                 const build = iconUrl =>
-                    (iconUrl ? `<img class="game-icon" src="${iconUrl}" alt="" onerror="this.remove(); fitMarquee()">` : '') +
+                    (iconUrl ? `<img class="game-icon" src="${iconUrl}" alt="" onerror="this.remove()">` : '') +
                     `<span class="game-name">${esc(game.name)}</span>` +
                     (startTime ? ` <span class="game-time game-timer"></span>` : '') +
-                    (desc ? ` <span class="game-time">— ${esc(desc)}</span>` : '');
+                    (desc ? ` <span class="game-time game-desc">— ${esc(desc)}</span>` : '');
                 const render = iconUrl => {
-                    const inner = build(iconUrl);
-                    activeVal.innerHTML = `<div class="marq"><div class="marq-track"><span class="marq-item">${inner}</span><span class="marq-gap"></span><span class="marq-item marq-clone" aria-hidden="true">${inner}</span><span class="marq-gap"></span></div></div>`;
+                    activeVal.innerHTML = build(iconUrl);
                     tick();
                 };
                 const tick = () => {
@@ -741,7 +716,6 @@
                         const t = '(' + formatDuration(startTime) + ')';
                         activeVal.querySelectorAll('.game-timer').forEach(el => { el.textContent = t; });
                     }
-                    fitMarquee();
                 };
                 activeRow.style.display = 'flex';
                 render(icon);
